@@ -1,6 +1,6 @@
 {application, emqx_prometheus,
  [{description, "Prometheus for EMQ X"},
-  {vsn, "git"},
+  {vsn, "4.3.1"}, % strict semver, bump manually!
   {modules, []},
   {registered, [emqx_prometheus_sup]},
   {applications, [kernel,stdlib,prometheus]},

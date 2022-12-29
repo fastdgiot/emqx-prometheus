@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2020 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2020-2022 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -124,13 +124,15 @@ collect_mf(_Registry, Callback) ->
     Metrics = emqx_metrics:all(),
     Stats = emqx_stats:getstats(),
     VMData = emqx_vm_data(),
-    [add_collect_family(Name, Stats, Callback, gauge) || Name <- emqx_stats()],
-    [add_collect_family(Name, VMData, Callback, gauge) || Name <- emqx_vm()],
-    [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_packets()],
-    [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_messages()],
-    [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_delivery()],
-    [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_client()],
-    [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_session()],
+    ClusterData = emqx_cluster_data(),
+    _ = [add_collect_family(Name, Stats, Callback, gauge) || Name <- emqx_stats()],
+    _ = [add_collect_family(Name, VMData, Callback, gauge) || Name <- emqx_vm()],
+    _ = [add_collect_family(Name, ClusterData, Callback, gauge) || Name <- emqx_cluster()],
+    _ = [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_packets()],
+    _ = [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_messages()],
+    _ = [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_delivery()],
+    _ = [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_client()],
+    _ = [add_collect_family(Name, Metrics, Callback, counter) || Name <- emqx_metrics_session()],
     ok.
 
 %% @private
@@ -166,7 +168,7 @@ collect_metrics(Name, Metrics) ->
     emqx_collect(Name, Metrics).
 
 add_collect_family(Name, Data, Callback, Type) ->
-    Callback(create_schema(Name, "",  Data, Type)).
+    Callback(create_schema(Name, <<"">>,  Data, Type)).
 
 create_schema(Name, Help, Data, Type) ->
   create_mf(Name, Help, Type, ?MODULE, Data).
@@ -410,8 +412,8 @@ emqx_collect(emqx_client_connected, Stats) ->
     counter_metric(?C('client.connected', Stats));
 emqx_collect(emqx_client_authenticate, Stats) ->
     counter_metric(?C('client.authenticate', Stats));
-emqx_collect(emqx_client_auth_anonymous, Stats) ->
-    counter_metric(?C('client.auth.anonymous', Stats));
+emqx_collect(emqx_client_auth_success_anonymous, Stats) ->
+    counter_metric(?C('client.auth.success.anonymous', Stats));
 emqx_collect(emqx_client_check_acl, Stats) ->
     counter_metric(?C('client.check_acl', Stats));
 emqx_collect(emqx_client_subscribe, Stats) ->
@@ -454,7 +456,13 @@ emqx_collect(emqx_vm_total_memory, VMData) ->
     gauge_metric(?C(total_memory, VMData));
 
 emqx_collect(emqx_vm_used_memory, VMData) ->
-    gauge_metric(?C(used_memory, VMData)).
+    gauge_metric(?C(used_memory, VMData));
+
+emqx_collect(emqx_cluster_nodes_running, ClusterData) ->
+    gauge_metric(?C(nodes_running, ClusterData));
+
+emqx_collect(emqx_cluster_nodes_stopped, ClusterData) ->
+    gauge_metric(?C(nodes_stopped, ClusterData)).
 
 %%--------------------------------------------------------------------
 %% Indicators
@@ -558,7 +566,7 @@ emqx_metrics_delivery() ->
 emqx_metrics_client() ->
     [ emqx_client_connected
     , emqx_client_authenticate
-    , emqx_client_auth_anonymous
+    , emqx_client_auth_success_anonymous
     , emqx_client_check_acl
     , emqx_client_subscribe
     , emqx_client_unsubscribe
@@ -592,3 +600,13 @@ emqx_vm_data() ->
      {process_total_messages, 0}, %% XXX: Plan removed at v5.0
      {cpu_idle, Idle},
      {cpu_use, 100 - Idle}] ++ emqx_vm:mem_info().
+
+emqx_cluster() ->
+    [ emqx_cluster_nodes_running
+    , emqx_cluster_nodes_stopped
+    ].
+
+emqx_cluster_data() ->
+    #{running_nodes := Running, stopped_nodes := Stopped} = ekka_mnesia:cluster_info(),
+    [{nodes_running, length(Running)},
+     {nodes_stopped, length(Stopped)}].
